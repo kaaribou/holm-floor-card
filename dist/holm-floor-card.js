@@ -1,4 +1,4 @@
-/* holm-floor-card — https://github.com/kaaribou/holm-floor-card — licence MIT — v1.0.0 */
+/* holm-floor-card — https://github.com/kaaribou/holm-floor-card — licence MIT — v1.1.0 */
 /* HOLM Floor Card — v1
  * Températures & humidité d'un étage, pièce par pièce.
  * - En-tête : moyenne de l'étage, humidité moyenne, écart, température dehors
@@ -28,6 +28,20 @@
   const num = (s) => (s && !isNaN(parseFloat(s.state)) ? parseFloat(s.state) : null);
   const avg = (a) => { const v = a.filter((x) => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
 
+  // badge batterie : icône et couleur selon le niveau et les seuils de la carte
+  const battery = (st, warn, low) => {
+    if (!st || st.state === "unavailable" || st.state === "unknown") return { icon: "mdi:battery-unknown", c: "148,163,184", pct: null, low: false };
+    if (st.entity_id.startsWith("binary_sensor.")) {
+      const isLow = st.state === "on";
+      return { icon: isLow ? "mdi:battery-alert-variant-outline" : "mdi:battery", c: isLow ? "239,68,68" : "74,222,128", pct: null, low: isLow };
+    }
+    const v = parseFloat(st.state);
+    if (isNaN(v)) return { icon: "mdi:battery-unknown", c: "148,163,184", pct: null, low: false };
+    const icon = v > 90 ? "mdi:battery" : v > 60 ? "mdi:battery-80" : v > 30 ? "mdi:battery-50" : v > 20 ? "mdi:battery-30" : v > 10 ? "mdi:battery-alert-variant-outline" : "mdi:battery-alert";
+    const c = v < low ? "239,68,68" : v < warn ? "251,191,36" : "74,222,128";
+    return { icon, c, pct: Math.round(v), low: v < warn };
+  };
+
   const spark = (pts, w, h, pad = 2) => {
     const v = pts.filter((p) => p.v != null);
     if (v.length < 2) return "";
@@ -54,7 +68,7 @@
     }
     setConfig(config) {
       if (!config || !Array.isArray(config.rooms) || !config.rooms.length) throw new Error("Ajoute au moins une pièce.");
-      this._config = { title: "Étage", icon: "mdi:home-floor-0", hours: 24, show_humidity: true, ...config };
+      this._config = { title: "Étage", icon: "mdi:home-floor-0", hours: 24, show_humidity: true, theme: "auto", battery_display: "always", battery_percent: false, battery_warn: 30, battery_low: 15, ...config };
       this._stats = {};
       this._statsTs = 0;
       this._sel = null;
@@ -72,6 +86,7 @@
     set hass(hass) {
       this._hass = hass;
       if (!this._config) return;
+      this._tone();
       if (!this._built) this._build();
       this._render();
       this._fetch(false);
@@ -80,6 +95,43 @@
       if (this._hass && this._built) this._fetch(true);
     }
 
+    // Apparence : auto (suit le fond réellement appliqué par le thème), sombre, clair ou couleurs du thème
+    // batterie : si l'entité choisie ne donne pas de pourcentage (capteur « batterie faible » ou % indisponible),
+    // on cherche un autre capteur de batterie sur le même appareil pour récupérer le niveau
+    _battery(h, id) {
+      const warn = Number(this._config.battery_warn) || 30, low = Number(this._config.battery_low) || 15;
+      const st = h.states[id];
+      let b = battery(st, warn, low);
+      if (b.pct != null || !h.entities) return b;
+      const dev = h.entities[id] && h.entities[id].device_id;
+      if (!dev) return b;
+      const sib = Object.values(h.entities).map((e) => e.device_id === dev && e.entity_id !== id ? h.states[e.entity_id] : null)
+        .filter((x) => x && x.attributes.device_class === "battery" && x.state !== "unknown" && x.state !== "unavailable");
+      const pctSt = sib.find((x) => x.entity_id.startsWith("sensor.") && !isNaN(parseFloat(x.state)));
+      const lowSt = id.startsWith("binary_sensor.") ? st : sib.find((x) => x.entity_id.startsWith("binary_sensor."));
+      if (pctSt) {
+        b = battery(pctSt, warn, low);
+        if (lowSt && lowSt.state === "on") b = { ...b, c: "239,68,68", low: true };
+      } else if (lowSt && b.icon === "mdi:battery-unknown") b = battery(lowSt, warn, low);
+      return b;
+    }
+    _tone() {
+      const t = this._config.theme || "auto";
+      let dark = !!(this._hass && this._hass.themes && this._hass.themes.darkMode);
+      try {
+        const cs = getComputedStyle(this);
+        const bg = (cs.getPropertyValue("--primary-background-color") || cs.getPropertyValue("--card-background-color") || "").trim();
+        const m = bg.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i) || bg.match(/rgba?\(([^)]+)\)/i);
+        if (m) {
+          let c;
+          if (bg.startsWith("#")) { const h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1]; c = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); }
+          else c = m[1].split(",").slice(0, 3).map((x) => parseFloat(x));
+          if (c.every((x) => !isNaN(x))) dark = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255 < 0.5;
+        }
+      } catch (e) { /* on garde darkMode */ }
+      const tone = t === "auto" ? (dark ? "dark" : "light") : t;
+      if (this.dataset.tone !== tone) this.dataset.tone = tone;
+    }
     _ids() {
       const ids = [];
       this._config.rooms.forEach((r) => { if (r.temperature) ids.push(r.temperature); if (r.humidity) ids.push(r.humidity); });
@@ -133,7 +185,8 @@
         const ago = Date.now() - 3600000;
         const past = pts.filter((p) => p.t <= ago && p.v != null).pop();
         const trend = past && t != null ? t - past.v : null;
-        return { i, r, t, hu, trend, pts, unav: !ts || ts.state === "unavailable" };
+        const bat = r.battery ? this._battery(h, r.battery) : null;
+        return { i, r, t, hu, trend, pts, bat, unav: !ts || ts.state === "unavailable" };
       });
     }
 
@@ -193,7 +246,7 @@
           const el = document.createElement("div");
           el.className = "room";
           el.innerHTML = `<svg class="sp" viewBox="0 0 120 40" preserveAspectRatio="none"><defs><linearGradient id="g${x.i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-opacity=".35"/><stop offset="1" stop-opacity="0"/></linearGradient></defs><path class="ar"/><path class="ln"/></svg>
-            <div class="rt"><ha-icon class="ri"></ha-icon><span class="rn"></span></div>
+            <div class="rt"><ha-icon class="ri"></ha-icon><span class="rn"></span></div><span class="bt"></span>
             <div class="rv"><b class="tv"></b><sup>°</sup><span class="tr"></span></div>
             <div class="rh"></div>`;
           let timer = null, held = false;
@@ -211,6 +264,16 @@
         el.classList.toggle("unav", x.unav);
         el.querySelector(".ri").setAttribute("icon", x.r.icon || "mdi:thermometer");
         el.querySelector(".rn").textContent = x.r.name;
+        const bt = el.querySelector(".bt"), bd = cfg.battery_display;
+        const showBat = x.bat && bd !== "never" && (bd !== "low" || x.bat.low);
+        el.classList.toggle("hasbat", !!showBat);
+        el.classList.toggle("hasbatp", !!(showBat && cfg.battery_percent && x.bat.pct != null));
+        bt.style.display = showBat ? "" : "none";
+        if (showBat) {
+          bt.style.setProperty("--b", x.bat.c);
+          bt.title = `Batterie${x.bat.pct != null ? ` ${x.bat.pct} %` : x.bat.low ? " faible" : ""}`;
+          bt.innerHTML = `<ha-icon icon="${x.bat.icon}"></ha-icon>${cfg.battery_percent && x.bat.pct != null ? `${x.bat.pct}<small>%</small>` : ""}`;
+        }
         el.querySelector(".tv").textContent = fmt(x.t);
         const tr = el.querySelector(".tr");
         if (x.trend != null && Math.abs(x.trend) >= 0.2) {
@@ -295,9 +358,15 @@
       return `
       :host { display: block; }
       ha-card { display: block; position: relative; overflow: hidden; container-type: inline-size; --f: 74,222,128;
-        --tx: #e6f2f5; --tx2: rgba(220,235,240,.62);
-        border-radius: var(--ha-card-border-radius, 20px); background: linear-gradient(160deg, rgba(20,28,38,.92), rgba(10,15,22,.96));
-        border: 1px solid rgba(var(--f), .18); box-shadow: 0 8px 26px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); color: var(--tx); user-select: none; }
+        --tx: #e6f2f5; --tx2: rgba(220,235,240,.62); --hi: #fff; --ink: 255,255,255; --ring: rgba(14,20,28,.95); --chip: rgba(12,18,26,.75); --panel: rgba(0,0,0,.25);
+        --bg: linear-gradient(160deg, rgba(20,28,38,.92), rgba(10,15,22,.96)); --shadow: 0 8px 26px rgba(0,0,0,.35); --glow: 1;
+        border-radius: var(--ha-card-border-radius, 20px); background: var(--bg);
+        border: 1px solid rgba(var(--f), .18); box-shadow: var(--shadow), inset 0 1px 0 rgba(var(--ink),.04); color: var(--tx); user-select: none; }
+      :host([data-tone="light"]) ha-card { --tx: #0f172a; --tx2: rgba(15,23,42,.6); --hi: #0f172a; --ink: 15,23,42; --ring: #fff; --chip: rgba(255,255,255,.85); --panel: rgba(15,23,42,.04);
+        --bg: linear-gradient(160deg, #ffffff, #f3f6f9); --shadow: 0 6px 20px rgba(15,23,42,.08); --glow: 0; }
+      :host([data-tone="theme"]) ha-card { --tx: var(--primary-text-color); --tx2: var(--secondary-text-color); --hi: var(--primary-text-color); --ink: 127,127,127;
+        --ring: var(--card-background-color, #fff); --chip: var(--card-background-color, rgba(0,0,0,.4)); --panel: rgba(127,127,127,.08);
+        --bg: var(--ha-card-background, var(--card-background-color)); --shadow: var(--ha-card-box-shadow, none); --glow: 0; }
       .amb { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(80% 60% at 100% 0%, rgba(var(--f), .16), transparent 70%); transition: background 1s; }
       button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
       .wrap { position: relative; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
@@ -320,16 +389,16 @@
       .bar { height: 6px; border-radius: 3px; opacity: .85; box-shadow: 0 0 12px rgba(var(--f), .25); }
       .dots { position: absolute; left: 6px; right: 6px; top: 0; height: 56px; }
       .dot { position: absolute; bottom: 5px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; transition: left .8s cubic-bezier(.3,1.2,.5,1); }
-      .dot i { width: 12px; height: 12px; border-radius: 50%; background: rgb(var(--c)); box-shadow: 0 0 0 2.5px rgba(14,20,28,.95), 0 0 10px rgb(var(--c)); order: 2; }
+      .dot i { width: 12px; height: 12px; border-radius: 50%; background: rgb(var(--c)); box-shadow: 0 0 0 2.5px var(--ring), 0 0 10px rgba(var(--c), calc(.3 + var(--glow) * .7)); order: 2; }
       .dot em { order: 1; font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--tx2); white-space: nowrap; margin-bottom: calc(3px + var(--l) * 11px); }
-      .dot.sel i { transform: scale(1.35); } .dot.sel em { color: #fff; }
+      .dot.sel i { transform: scale(1.35); } .dot.sel em { color: var(--hi); }
       .dot.out i { background: transparent; box-shadow: 0 0 0 2px rgba(200,210,225,.9); }
-      .mean { position: absolute; bottom: 1px; width: 2px; height: 14px; margin-left: -1px; border-radius: 1px; background: #fff; opacity: .8; }
+      .mean { position: absolute; bottom: 1px; width: 2px; height: 14px; margin-left: -1px; border-radius: 1px; background: var(--hi); opacity: .8; }
       .scale { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--tx2); margin-top: 4px; }
 
       .rooms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .room { --c: 74,222,128; position: relative; overflow: hidden; min-width: 0; padding: 10px 10px 8px; border-radius: 16px; cursor: pointer;
-        background: linear-gradient(160deg, rgba(var(--c), .12), rgba(255,255,255,.03)); box-shadow: inset 0 0 0 1px rgba(var(--c), .2); transition: transform .15s, box-shadow .3s, background .6s; }
+        background: linear-gradient(160deg, rgba(var(--c), .12), rgba(var(--ink),.03)); box-shadow: inset 0 0 0 1px rgba(var(--c), .2); transition: transform .15s, box-shadow .3s, background .6s; }
       .room:active { transform: scale(.97); }
       .room.sel { box-shadow: inset 0 0 0 1.5px rgba(var(--c), .8), 0 6px 20px -8px rgb(var(--c)); }
       .room.unav { opacity: .45; }
@@ -338,40 +407,44 @@
       .rt { position: relative; display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: var(--tx); min-width: 0; }
       .rt ha-icon { --mdc-icon-size: 16px; color: rgb(var(--c)); flex: 0 0 auto; }
       .rn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .room.hasbat .rt { padding-right: 22px; } .room.hasbatp .rt { padding-right: 44px; }
+      .bt { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 1px; padding: 1px 4px 1px 2px; border-radius: 8px; font-size: 10.5px; font-weight: 800;
+        color: rgb(var(--b)); background: linear-gradient(rgba(var(--b), .16), rgba(var(--b), .16)), var(--chip); font-variant-numeric: tabular-nums; z-index: 1; }
+      .bt ha-icon { --mdc-icon-size: 14px; } .bt small { font-size: 8.5px; font-weight: 700; opacity: .8; }
       .rv { position: relative; display: flex; align-items: baseline; gap: 1px; margin-top: 4px; }
-      .tv { font-size: 27px; font-weight: 800; letter-spacing: -.03em; color: rgb(var(--c)); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(var(--c), .35); }
+      .tv { font-size: 27px; font-weight: 800; letter-spacing: -.03em; color: rgb(var(--c)); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(var(--c), calc(var(--glow) * .35)); }
       .rv sup { font-size: 13px; color: rgb(var(--c)); align-self: flex-start; margin-top: 3px; }
       .tr { display: inline-flex; align-items: center; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: var(--tx2); }
       .tr ha-icon { --mdc-icon-size: 13px; }
       .tr.up { color: rgb(251,146,60); } .tr.down { color: rgb(56,189,248); }
       .rh { position: relative; min-height: 18px; margin-top: 2px; margin-bottom: 8px; }
-      .rh span { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px 1px 3px; border-radius: 8px; font-size: 11px; font-weight: 700; color: rgb(var(--h)); background: linear-gradient(rgba(var(--h), .16), rgba(var(--h), .16)), rgba(12,18,26,.75); backdrop-filter: blur(4px); }
+      .rh span { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px 1px 3px; border-radius: 8px; font-size: 11px; font-weight: 700; color: rgb(var(--h)); background: linear-gradient(rgba(var(--h), .16), rgba(var(--h), .16)), var(--chip); backdrop-filter: blur(4px); }
       .rh ha-icon { --mdc-icon-size: 12px; }
       .rh small { font-weight: 600; opacity: .8; margin-left: 4px; }
 
-      .detail { display: none; padding: 10px; border-radius: 16px; background: rgba(0,0,0,.25); box-shadow: inset 0 0 0 1px rgba(var(--c), .3); }
+      .detail { display: none; padding: 10px; border-radius: 16px; background: var(--panel); box-shadow: inset 0 0 0 1px rgba(var(--c), .3); }
       .detail.open { display: block; animation: din .35s cubic-bezier(.3,1.2,.5,1); }
       @keyframes din { from { opacity: 0; transform: translateY(-6px); } }
       .dh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
       .dn { flex: 1; display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13.5px; }
       .dn ha-icon { --mdc-icon-size: 18px; color: rgb(var(--c)); }
-      .seg { display: flex; padding: 2px; border-radius: 10px; background: rgba(255,255,255,.06); }
+      .seg { display: flex; padding: 2px; border-radius: 10px; background: rgba(var(--ink),.06); }
       .seg button { padding: 4px 10px; border-radius: 8px; font-size: 11.5px; font-weight: 700; color: var(--tx2); }
-      .seg button.on { background: rgba(var(--c), .3); color: #fff; }
-      .x { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.06); }
+      .seg button.on { background: rgba(var(--c), .3); color: var(--hi); }
+      .x { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: rgba(var(--ink),.06); }
       .x ha-icon { --mdc-icon-size: 16px; }
       .big { width: 100%; height: auto; display: block; }
-      .grid line { stroke: rgba(255,255,255,.07); stroke-dasharray: 3 4; }
-      .grid text, .xt { fill: rgba(220,235,240,.5); font-size: 8.5px; text-anchor: end; }
+      .grid line { stroke: rgba(var(--ink),.1); stroke-dasharray: 3 4; }
+      .grid text, .xt { fill: var(--tx2); font-size: 8.5px; text-anchor: end; }
       .xt { text-anchor: middle; }
       .band { fill: rgba(var(--c), .12); }
-      .tl { fill: none; stroke: rgb(var(--c)); stroke-width: 2; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(var(--c), .6)); }
+      .tl { fill: none; stroke: rgb(var(--c)); stroke-width: 2; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(var(--c), calc(var(--glow) * .6))); }
       .hl { fill: none; stroke: rgb(56,189,248); stroke-width: 1.4; stroke-dasharray: 4 3; opacity: .8; }
       .dl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 11px; color: var(--tx2); margin-top: 4px; }
       .dl span { display: inline-flex; align-items: center; gap: 5px; }
       .dl i { width: 14px; height: 3px; border-radius: 2px; }
       .lt { background: rgb(var(--c)); } .lh { background: repeating-linear-gradient(90deg, rgb(56,189,248) 0 4px, transparent 4px 7px); }
-      .mm { margin-left: auto; } .mm b { color: #fff; }
+      .mm { margin-left: auto; } .mm b { color: var(--hi); }
       .nodata { padding: 30px; text-align: center; font-size: 12px; color: var(--tx2); }
 
       @container (min-width: 520px) { .rooms { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -382,9 +455,15 @@
   }
 
   class HolmFloorCardEditor extends HTMLElement {
+    // L'éditeur ne se reconstruit que si la configuration change vraiment de l'extérieur : avant, il se
+    // reconstruisait quand Home Assistant mettait plus de 0,4 s à renvoyer la configuration (fréquent dans
+    // l'application mobile) et le sélecteur d'entité ouvert était détruit avant d'enregistrer le choix (#1).
     setConfig(config) {
-      this._config = JSON.parse(JSON.stringify(config || {}));
-      if (!this._self) this._render();
+      const json = JSON.stringify(config || {});
+      // écho d'une config que l'éditeur vient lui-même d'envoyer : on garde l'état local (plus récent)
+      if ((this._sent || []).includes(json)) return;
+      this._config = JSON.parse(json);
+      this._render();
     }
     set hass(hass) {
       this._hass = hass;
@@ -392,14 +471,15 @@
       if (!this._done) this._render();
     }
     _emit() {
-      this._self = true;
-      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: JSON.parse(JSON.stringify(this._config)) }, bubbles: true, composed: true }));
-      clearTimeout(this._st); this._st = setTimeout(() => (this._self = false), 400);
+      const cfg = JSON.parse(JSON.stringify(this._config));
+      this._sent = [...(this._sent || []), JSON.stringify(cfg)].slice(-20);
+      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: cfg }, bubbles: true, composed: true }));
     }
     _form(schema, data, cb, L) {
       const f = document.createElement("ha-form");
       f.hass = this._hass; f.schema = schema; f.data = data; f.computeLabel = (s) => L[s.name] || s.name;
-      f.addEventListener("value-changed", (e) => { e.stopPropagation(); f.data = e.detail.value; cb(e.detail.value); });
+      f.computeHelper = (s) => (this._help || {})[s.name] || "";
+      f.addEventListener("value-changed", (e) => { e.stopPropagation(); f.data = e.detail.value; cb({ ...e.detail.value }); });
       return f;
     }
     _btn(icon, label, fn) {
@@ -411,43 +491,59 @@
     _render() {
       if (!this._hass || !this._config) return;
       this._done = true;
+      this._open = this._open || new Set();
       const c = this._config;
       c.rooms = c.rooms || [];
       const L = { title: "Nom de l'étage", icon: "Icône", outdoor_entity: "Température extérieure (option)", hours: "Heures sur les mini-courbes", show_humidity: "Afficher l'humidité",
-        name: "Pièce", short: "Nom court (bande)", temperature: "Capteur de température", humidity: "Capteur d'humidité (option)" };
-      this.innerHTML = `<style>.fl-h{margin:14px 0 6px;font-weight:700;display:flex;align-items:center;gap:8px}ha-expansion-panel{margin:6px 0;border-radius:12px}.fl-r{display:flex;align-items:center;gap:4px}.fl-r .t{flex:1;display:flex;gap:8px;align-items:center;font-weight:600}</style>`;
+        theme: "Apparence", battery_display: "Badge batterie", battery_percent: "Afficher le pourcentage", battery_warn: "Seuil orange (%)", battery_low: "Seuil rouge (%)",
+        name: "Pièce", short: "Nom court (bande)", temperature: "Capteur de température", humidity: "Capteur d'humidité (option)", battery: "Batterie de la sonde (option)" };
+      this._help = { battery_display: "Pour les pièces qui ont un capteur de batterie", battery_percent: "Si la sonde ne remonte qu\u2019un état « batterie faible », seule l\u2019icône s\u2019affiche" };
+      this.innerHTML = `<style>.fl-h{margin:14px 0 6px;font-weight:700;display:flex;align-items:center;gap:8px}ha-expansion-panel{margin:6px 0;border-radius:12px}.fl-r{display:flex;align-items:center;gap:4px}.fl-r .t{flex:1;display:flex;gap:8px;align-items:center;font-weight:600}.fl-add{margin-top:8px}button.fl-add{padding:8px 14px;border-radius:10px;border:1px solid var(--divider-color,#888);background:none;color:var(--primary-color);font:inherit;font-weight:600;cursor:pointer}</style>`;
       this.appendChild(this._form([
         { type: "grid", name: "", schema: [{ name: "title", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
         { name: "outdoor_entity", selector: { entity: { domain: "sensor", device_class: "temperature" } } },
         { type: "grid", name: "", schema: [{ name: "hours", selector: { number: { min: 6, max: 72, step: 6, mode: "box" } } }, { name: "show_humidity", selector: { boolean: {} } }] },
-      ], { hours: 24, show_humidity: true, ...c }, (v) => { Object.assign(this._config, v); this._emit(); }, L));
+        { name: "theme", selector: { select: { mode: "dropdown", options: [{ value: "auto", label: "Automatique (suit le mode clair / sombre)" }, { value: "dark", label: "Sombre" }, { value: "light", label: "Clair" }, { value: "theme", label: "Couleurs de mon thème Home Assistant" }] } } },
+        { type: "grid", name: "", schema: [
+          { name: "battery_display", selector: { select: { mode: "dropdown", options: [{ value: "always", label: "Toujours" }, { value: "low", label: "Seulement si faible" }, { value: "never", label: "Jamais" }] } } },
+          { name: "battery_percent", selector: { boolean: {} } },
+          { name: "battery_warn", selector: { number: { min: 5, max: 95, step: 5, mode: "box", unit_of_measurement: "%" } } },
+          { name: "battery_low", selector: { number: { min: 5, max: 95, step: 5, mode: "box", unit_of_measurement: "%" } } },
+        ] },
+      ], { hours: 24, show_humidity: true, theme: "auto", battery_display: "always", battery_percent: false, battery_warn: 30, battery_low: 15, ...c }, (v) => { Object.assign(this._config, v); this._emit(); }, L));
       const h = document.createElement("div");
       h.className = "fl-h"; h.innerHTML = `<ha-icon icon="mdi:floor-plan"></ha-icon>Pièces`;
       this.appendChild(h);
       c.rooms.forEach((r, i) => {
         const p = document.createElement("ha-expansion-panel");
         p.outlined = true;
+        p.expanded = this._open.has(i);
+        p.addEventListener("expanded-changed", (e) => { if (e.target !== p) return; if (e.detail && e.detail.expanded) this._open.add(i); else this._open.delete(i); });
         const hd = document.createElement("div");
         hd.slot = "header"; hd.className = "fl-r";
         const t = document.createElement("div");
         t.className = "t";
-        const ref = () => (t.innerHTML = `<ha-icon icon="${r.icon || "mdi:thermometer"}"></ha-icon>${r.name || "Pièce " + (i + 1)}`);
-        ref();
+        const ref = (room) => (t.innerHTML = `<ha-icon icon="${room.icon || "mdi:thermometer"}"></ha-icon>${room.name || "Pièce " + (i + 1)}`);
+        ref(r);
+        const move = (to) => { const o = new Set([...this._open].map((k) => (k === i ? to : k === to ? i : k))); this._open = o; };
         hd.append(t,
-          this._btn("mdi:arrow-up", "Monter", () => { if (i > 0) { c.rooms.splice(i - 1, 0, c.rooms.splice(i, 1)[0]); this._emit(); this._render(); } }),
-          this._btn("mdi:delete-outline", "Supprimer", () => { c.rooms.splice(i, 1); this._emit(); this._render(); }));
+          this._btn("mdi:arrow-up", "Monter", () => { if (i > 0) { c.rooms.splice(i - 1, 0, c.rooms.splice(i, 1)[0]); move(i - 1); this._emit(); this._render(); } }),
+          this._btn("mdi:delete-outline", "Supprimer", () => { c.rooms.splice(i, 1); this._open = new Set([...this._open].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))); this._emit(); this._render(); }));
         p.appendChild(hd);
         p.appendChild(this._form([
           { type: "grid", name: "", schema: [{ name: "name", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
           { name: "temperature", selector: { entity: { domain: "sensor", device_class: "temperature" } } },
           { name: "humidity", selector: { entity: { domain: "sensor", device_class: "humidity" } } },
+          { name: "battery", selector: { entity: { domain: ["sensor", "binary_sensor"], device_class: "battery" } } },
           { name: "short", selector: { text: {} } },
-        ], r, (v) => { Object.keys(v).forEach((k) => { if (v[k] === "" || v[k] == null) delete v[k]; }); c.rooms[i] = v; Object.assign(r, v); ref(); this._emit(); }, L));
+        ], r, (v) => { Object.keys(v).forEach((k) => { if (v[k] === "" || v[k] == null) delete v[k]; }); c.rooms[i] = v; ref(v); this._emit(); }, L));
         this.appendChild(p);
       });
-      const add = document.createElement("mwc-button");
-      add.raised = true; add.innerHTML = "+ Ajouter une pièce"; add.style.marginTop = "8px";
-      add.addEventListener("click", () => { c.rooms.push({ name: "Nouvelle pièce" }); this._emit(); this._render(); });
+      const tag = customElements.get("ha-button") ? "ha-button" : "button";
+      const add = document.createElement(tag);
+      add.className = "fl-add";
+      add.textContent = "+ Ajouter une pièce";
+      add.addEventListener("click", () => { c.rooms.push({ name: "Nouvelle pièce" }); this._open.add(c.rooms.length - 1); this._emit(); this._render(); });
       this.appendChild(add);
     }
   }
@@ -460,4 +556,4 @@
   }
 })();
 
-console.info("%c HOLM-FLOOR %c 1.0.0 ", "background:#4ade80;color:#111;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");
+console.info("%c HOLM-FLOOR %c 1.1.0 ", "background:#4ade80;color:#111;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");

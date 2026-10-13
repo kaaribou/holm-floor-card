@@ -16,6 +16,8 @@ HOLM Floor Card regroupe les sondes de température (et d'humidité) d'un étage
 - 🌈 **Bande thermique** : chaque pièce (et l'extérieur) placée sur une échelle de couleurs, du bleu au rouge.
 - 🧱 **Tuiles pièces** : température colorée, tendance sur une heure (↗ / ↘), humidité avec son niveau (Sec, Idéal, Humide…), mini-courbe 24 h.
 - 📈 **Graphique détaillé** au toucher : température et humidité sur **24 h ou 7 jours**, avec min / moyenne / max.
+- 🔋 **Badge batterie** (option) sur chaque tuile : icône et couleur selon le niveau, avec vos propres seuils.
+- 🎨 **Thème clair, sombre ou couleurs de votre thème** Home Assistant.
 - 👆 Appui long sur une pièce : fiche de l'entité.
 
 | Vue d'ensemble | Graphique d'une pièce |
@@ -55,6 +57,7 @@ rooms:
     icon: mdi:sofa
     temperature: sensor.salon_temperature
     humidity: sensor.salon_humidite
+    battery: sensor.salon_batterie
   - name: Salle de bain
     short: SdB
     temperature: sensor.sdb_temperature
@@ -68,7 +71,27 @@ rooms:
 | `outdoor_entity` | Température extérieure (affichée dans l'en-tête et sur la bande) | — |
 | `hours` | Durée des mini-courbes (h) | `24` |
 | `show_humidity` | Afficher l'humidité | `true` |
-| `rooms` | Pièces : `name`, `icon`, `temperature` (**obligatoire**), `humidity`, `short` (nom court sur la bande) | — |
+| `theme` | Apparence : `auto` (suit le mode clair / sombre de Home Assistant), `dark`, `light`, `theme` (couleurs de votre thème) | `auto` |
+| `battery_display` | Badge batterie : `always` (toujours), `low` (seulement si faible), `never` (jamais) | `always` |
+| `battery_percent` | Afficher le pourcentage à côté de l'icône | `false` |
+| `battery_warn` | Seuil orange (%) | `30` |
+| `battery_low` | Seuil rouge (%) | `15` |
+| `rooms` | Pièces : `name`, `icon`, `temperature` (**obligatoire**), `humidity`, `battery`, `short` (nom court sur la bande) | — |
+
+### Badge batterie
+
+Ajoutez à une pièce le capteur de batterie de sa sonde (`battery`) : un capteur en % (`sensor`, classe `battery`) ou un capteur « batterie faible » (`binary_sensor`, classe `battery`).
+
+| Niveau | Icône | Couleur |
+|---|---|---|
+| au-dessus du seuil orange | 🔋 selon le niveau (plein, 80 %, 50 %…) | vert |
+| sous le seuil orange | | orange |
+| sous le seuil rouge, ou `binary_sensor` à « faible » | alerte | rouge |
+| indisponible | inconnue | gris |
+
+Si vous choisissez un capteur « batterie faible » (oui / non), la carte cherche un capteur de batterie en % sur le même appareil pour afficher le niveau ; s'il n'y en a pas (ou s'il est indisponible), seule l'icône s'affiche.
+
+Avec `battery_display: low`, le badge n'apparaît que lorsqu'il faut changer la pile.
 
 ## FAQ
 
@@ -76,6 +99,7 @@ rooms:
 |---|---|
 | Pas de courbe | La sonde n'a pas de statistiques : elle doit avoir un `state_class` (`measurement`). |
 | Noms qui se chevauchent sur la bande | Donnez un nom court (`short`) aux pièces aux noms longs. |
+| Les choix dans l'éditeur ne sont pas enregistrés (versions < 1.1.0) | Corrigé en 1.1.0 : mettez la carte à jour. |
 | La nouvelle version ne s'affiche pas | Videz le cache (Ctrl + F5). |
 
 ---
@@ -92,4 +116,4 @@ La carte vous plaît ? Vous pouvez m'offrir une bière 🍺
 
 Code : licence **MIT** — © kaaribou. Voir le [CHANGELOG](CHANGELOG.md).
 
-Fait partie de la collection **HOLM** : [Carburant HOLM](https://github.com/kaaribou/carburant-holm) · [HOLM Navbar Card](https://github.com/kaaribou/holm-navbar-card) · [HOLM Music Card](https://github.com/kaaribou/holm-music-card) · [HOLM Sentinel Card](https://github.com/kaaribou/holm-sentinel-card).
+Fait partie de la collection **HOLM — Home Orchestration & Living Management** : [Carburant HOLM](https://github.com/kaaribou/carburant-holm) · [HOLM LaMetric](https://github.com/kaaribou/lametric-holm) · [HOLM My Menu](https://github.com/kaaribou/holm-mymenu) · [HOLM Navbar Card](https://github.com/kaaribou/holm-navbar-card) · [HOLM Music Card](https://github.com/kaaribou/holm-music-card) · [HOLM Sentinel Card](https://github.com/kaaribou/holm-sentinel-card) · [HOLM Climate Card](https://github.com/kaaribou/climate-card-holm) · [HOLM Radiator Card](https://github.com/kaaribou/holm-radiator-card) · [HOLM Ecojoko Card](https://github.com/kaaribou/holm-ecojoko-card).
