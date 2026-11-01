@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+- **8 langues** : français, anglais, allemand, espagnol, italien, néerlandais, portugais et polonais, pour la carte et son éditeur visuel. Elle suit la langue du profil Home Assistant (anglais si la langue n'est pas traduite) ; nouvelle option `language`, aussi réglable dans l'éditeur.
+- README en anglais (`README.en.md`).
+
 ## 1.1.0
 - **Correction** : dans l'éditeur visuel, les pièces ajoutées (et les capteurs choisis) n'étaient pas toujours enregistrées, surtout dans l'application mobile (#1). L'éditeur ne se reconstruit plus pendant la saisie et garde les panneaux ouverts.
 - **Nouveau** : badge batterie optionnel sur chaque pièce (`battery`), avec icône et couleur selon le niveau, seuils orange / rouge réglables, pourcentage en option et mode « seulement si faible » (#2). Si vous choisissez un capteur « batterie faible », le pourcentage est repris d'un autre capteur de batterie du même appareil quand il existe.

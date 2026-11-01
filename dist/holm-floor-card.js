@@ -1,4 +1,4 @@
-/* holm-floor-card — https://github.com/kaaribou/holm-floor-card — licence MIT — v1.1.0 */
+/* holm-floor-card — https://github.com/kaaribou/holm-floor-card — licence MIT — v1.2.0 */
 /* HOLM Floor Card — v1
  * Températures & humidité d'un étage, pièce par pièce.
  * - En-tête : moyenne de l'étage, humidité moyenne, écart, température dehors
@@ -9,6 +9,104 @@
  *   min / moy / max) ; appui long : fiche de l'entité
  */
 (() => {
+  // ---- HOLM i18n : textes écrits en français, traduits à l'affichage (en, de, es, it, nl, pt, pl) ----
+  // Langue : option `language` de la carte, sinon celle du profil Home Assistant ; anglais si la langue n'est pas traduite.
+  const HOLM_LANGS = ["en", "de", "es", "it", "nl", "pt", "pl"];
+  const LANG_NAMES = { fr: "Français", en: "English", de: "Deutsch", es: "Español", it: "Italiano", nl: "Nederlands", pt: "Português", pl: "Polski" };
+  const LOCALES = { fr: "fr-FR", en: "en-GB", de: "de-DE", es: "es-ES", it: "it-IT", nl: "nl-NL", pt: "pt-PT", pl: "pl-PL" };
+  const I18N = {
+    "Automatique (profil)": ["Automatic (profile)", "Automatisch (Profil)", "Automático (perfil)", "Automatica (profilo)", "Automatisch (profiel)", "Automático (perfil)", "Automatycznie (profil)"],
+    "Langue": ["Language", "Sprache", "Idioma", "Lingua", "Taal", "Idioma", "Język"],
+    "Titre": ["Title", "Titel", "Título", "Titolo", "Titel", "Título", "Tytuł"],
+    "Titre (optionnel)": ["Title (optional)", "Titel (optional)", "Título (opcional)", "Titolo (facoltativo)", "Titel (optioneel)", "Título (opcional)", "Tytuł (opcjonalnie)"],
+    "Nom": ["Name", "Name", "Nombre", "Nome", "Naam", "Nome", "Nazwa"],
+    "Nom affiché": ["Display name", "Anzeigename", "Nombre mostrado", "Nome visualizzato", "Weergavenaam", "Nome apresentado", "Wyświetlana nazwa"],
+    "Icône": ["Icon", "Symbol", "Icono", "Icona", "Pictogram", "Ícone", "Ikona"],
+    "Couleur": ["Colour", "Farbe", "Color", "Colore", "Kleur", "Cor", "Kolor"],
+    "Couleurs": ["Colours", "Farben", "Colores", "Colori", "Kleuren", "Cores", "Kolory"],
+    "Entité": ["Entity", "Entität", "Entidad", "Entità", "Entiteit", "Entidade", "Encja"],
+    "Entités": ["Entities", "Entitäten", "Entidades", "Entità", "Entiteiten", "Entidades", "Encje"],
+    "Chargement…": ["Loading…", "Wird geladen…", "Cargando…", "Caricamento…", "Laden…", "A carregar…", "Ładowanie…"],
+    "Erreur": ["Error", "Fehler", "Error", "Errore", "Fout", "Erro", "Błąd"],
+    "Fermer": ["Close", "Schließen", "Cerrar", "Chiudi", "Sluiten", "Fechar", "Zamknij"],
+    "Annuler": ["Cancel", "Abbrechen", "Cancelar", "Annulla", "Annuleren", "Cancelar", "Anuluj"],
+    "Enregistrer": ["Save", "Speichern", "Guardar", "Salva", "Opslaan", "Guardar", "Zapisz"],
+    "Supprimer": ["Delete", "Löschen", "Eliminar", "Elimina", "Verwijderen", "Eliminar", "Usuń"],
+    "Ajouter": ["Add", "Hinzufügen", "Añadir", "Aggiungi", "Toevoegen", "Adicionar", "Dodaj"],
+    "Monter": ["Move up", "Nach oben", "Subir", "Sposta su", "Omhoog", "Mover para cima", "W górę"],
+    "Descendre": ["Move down", "Nach unten", "Bajar", "Sposta giù", "Omlaag", "Mover para baixo", "W dół"],
+    "Afficher le cadre de la carte": ["Show the card frame", "Kartenrahmen anzeigen", "Mostrar el marco de la tarjeta", "Mostra la cornice della scheda", "Kaartkader tonen", "Mostrar a moldura do cartão", "Pokaż ramkę karty"],
+    "Indisponible": ["Unavailable", "Nicht verfügbar", "No disponible", "Non disponibile", "Niet beschikbaar", "Indisponível", "Niedostępne"],
+    "Aujourd'hui": ["Today", "Heute", "Hoy", "Oggi", "Vandaag", "Hoje", "Dziś"],
+    "Hier": ["Yesterday", "Gestern", "Ayer", "Ieri", "Gisteren", "Ontem", "Wczoraj"],
+    "Demain": ["Tomorrow", "Morgen", "Mañana", "Domani", "Morgen", "Amanhã", "Jutro"],
+    "Batterie": ["Battery", "Batterie", "Batería", "Batteria", "Batterij", "Bateria", "Bateria"],
+    "Aucune donnée sur cette période.": ["No data for this period.", "Keine Daten für diesen Zeitraum.", "No hay datos en este periodo.", "Nessun dato per questo periodo.", "Geen gegevens voor deze periode.", "Sem dados neste período.", "Brak danych w tym okresie."],
+    "à l'instant": ["just now", "gerade eben", "ahora mismo", "proprio ora", "zojuist", "agora mesmo", "przed chwilą"],
+    "il y a {n} min": ["{n} min ago", "vor {n} Min.", "hace {n} min", "{n} min fa", "{n} min geleden", "há {n} min", "{n} min temu"],
+    "il y a {n} h": ["{n} h ago", "vor {n} Std.", "hace {n} h", "{n} h fa", "{n} u geleden", "há {n} h", "{n} godz. temu"],
+    "il y a {n} j": ["{n} d ago", "vor {n} T.", "hace {n} d", "{n} g fa", "{n} d geleden", "há {n} d", "{n} dni temu"],
+    "Sec": ["Dry", "Trocken", "Seco", "Secco", "Droog", "Seco", "Sucho"],
+    "Idéal": ["Ideal", "Ideal", "Ideal", "Ideale", "Ideaal", "Ideal", "Idealnie"],
+    "Humide": ["Humid", "Feucht", "Húmedo", "Umido", "Vochtig", "Húmido", "Wilgotno"],
+    "Très humide": ["Very humid", "Sehr feucht", "Muy húmedo", "Molto umido", "Erg vochtig", "Muito húmido", "Bardzo wilgotno"],
+    "Rez-de-chaussée": ["Ground floor", "Erdgeschoss", "Planta baja", "Piano terra", "Begane grond", "Rés-do-chão", "Parter"],
+    "Ajoute au moins une pièce.": ["Add at least one room.", "Füge mindestens einen Raum hinzu.", "Añade al menos una habitación.", "Aggiungi almeno una stanza.", "Voeg minstens één ruimte toe.", "Adicione pelo menos uma divisão.", "Dodaj co najmniej jedno pomieszczenie."],
+    "Étage": ["Floor", "Etage", "Planta", "Piano", "Verdieping", "Piso", "Piętro"],
+    "{n} pièce": ["{n} room", "{n} Raum", "{n} habitación", "{n} stanza", "{n} ruimte", "{n} divisão", "{n} pomieszczenie"],
+    "{n} pièces": ["{n} rooms", "{n} Räume", "{n} habitaciones", "{n} stanze", "{n} ruimtes", "{n} divisões", "pomieszczenia: {n}"],
+    "écart {x}°": ["spread {x}°", "Spanne {x}°", "diferencia {x}°", "scarto {x}°", "verschil {x}°", "diferença {x}°", "różnica {x}°"],
+    "dehors {x}°": ["outside {x}°", "draußen {x}°", "fuera {x}°", "fuori {x}°", "buiten {x}°", "fora {x}°", "na zewnątrz {x}°"],
+    "moyenne": ["average", "Mittel", "media", "media", "gemiddeld", "média", "średnio"],
+    "dehors": ["outside", "draußen", "fuera", "fuori", "buiten", "fora", "na zewnątrz"],
+    "Batterie {p} %": ["Battery {p}%", "Batterie {p} %", "Batería {p} %", "Batteria {p}%", "Batterij {p}%", "Bateria {p}%", "Bateria {p}%"],
+    "Batterie faible": ["Low battery", "Batterie schwach", "Batería baja", "Batteria scarica", "Batterij bijna leeg", "Bateria fraca", "Słaba bateria"],
+    "Historique en cours de chargement…": ["Loading history…", "Verlauf wird geladen…", "Cargando historial…", "Caricamento cronologia…", "Geschiedenis laden…", "A carregar histórico…", "Ładowanie historii…"],
+    "7 j": ["7 d", "7 T", "7 d", "7 g", "7 d", "7 d", "7 d"],
+    "Température": ["Temperature", "Temperatur", "Temperatura", "Temperatura", "Temperatuur", "Temperatura", "Temperatura"],
+    "Humidité": ["Humidity", "Luftfeuchtigkeit", "Humedad", "Umidità", "Luchtvochtigheid", "Humidade", "Wilgotność"],
+    "min {a} · moy {b} · max {c}": ["min {a} · avg {b} · max {c}", "min {a} · Ø {b} · max {c}", "mín {a} · media {b} · máx {c}", "min {a} · media {b} · max {c}", "min {a} · gem {b} · max {c}", "mín {a} · média {b} · máx {c}", "min {a} · śr. {b} · maks {c}"],
+    "Nom de l'étage": ["Floor name", "Name der Etage", "Nombre de la planta", "Nome del piano", "Naam van de verdieping", "Nome do piso", "Nazwa piętra"],
+    "Température extérieure (option)": ["Outdoor temperature (optional)", "Außentemperatur (optional)", "Temperatura exterior (opcional)", "Temperatura esterna (facoltativa)", "Buitentemperatuur (optioneel)", "Temperatura exterior (opcional)", "Temperatura zewnętrzna (opcjonalnie)"],
+    "Heures sur les mini-courbes": ["Hours on the mini charts", "Stunden in den Mini-Kurven", "Horas en las mini curvas", "Ore sulle mini curve", "Uren in de minigrafieken", "Horas nas mini curvas", "Godziny na mini wykresach"],
+    "Afficher l'humidité": ["Show humidity", "Luftfeuchtigkeit anzeigen", "Mostrar la humedad", "Mostra l'umidità", "Luchtvochtigheid tonen", "Mostrar a humidade", "Pokaż wilgotność"],
+    "Apparence": ["Appearance", "Erscheinungsbild", "Apariencia", "Aspetto", "Uiterlijk", "Aparência", "Wygląd"],
+    "Badge batterie": ["Battery badge", "Batterie-Badge", "Indicador de batería", "Badge batteria", "Batterijbadge", "Indicador de bateria", "Plakietka baterii"],
+    "Afficher le pourcentage": ["Show the percentage", "Prozentsatz anzeigen", "Mostrar el porcentaje", "Mostra la percentuale", "Percentage tonen", "Mostrar a percentagem", "Pokaż procent"],
+    "Seuil orange (%)": ["Orange threshold (%)", "Orange Schwelle (%)", "Umbral naranja (%)", "Soglia arancione (%)", "Oranje drempel (%)", "Limite laranja (%)", "Próg pomarańczowy (%)"],
+    "Seuil rouge (%)": ["Red threshold (%)", "Rote Schwelle (%)", "Umbral rojo (%)", "Soglia rossa (%)", "Rode drempel (%)", "Limite vermelho (%)", "Próg czerwony (%)"],
+    "Pièce": ["Room", "Raum", "Habitación", "Stanza", "Ruimte", "Divisão", "Pomieszczenie"],
+    "Nom court (bande)": ["Short name (strip)", "Kurzname (Leiste)", "Nombre corto (banda)", "Nome breve (barra)", "Korte naam (balk)", "Nome curto (faixa)", "Krótka nazwa (pasek)"],
+    "Capteur de température": ["Temperature sensor", "Temperatursensor", "Sensor de temperatura", "Sensore di temperatura", "Temperatuursensor", "Sensor de temperatura", "Czujnik temperatury"],
+    "Capteur d'humidité (option)": ["Humidity sensor (optional)", "Feuchtigkeitssensor (optional)", "Sensor de humedad (opcional)", "Sensore di umidità (facoltativo)", "Vochtigheidssensor (optioneel)", "Sensor de humidade (opcional)", "Czujnik wilgotności (opcjonalnie)"],
+    "Batterie de la sonde (option)": ["Sensor battery (optional)", "Batterie des Fühlers (optional)", "Batería de la sonda (opcional)", "Batteria della sonda (facoltativa)", "Batterij van de sensor (optioneel)", "Bateria da sonda (opcional)", "Bateria czujnika (opcjonalnie)"],
+    "Pour les pièces qui ont un capteur de batterie": ["For rooms with a battery sensor", "Für Räume mit Batteriesensor", "Para las habitaciones con sensor de batería", "Per le stanze con un sensore di batteria", "Voor ruimtes met een batterijsensor", "Para as divisões com sensor de bateria", "Dla pomieszczeń z czujnikiem baterii"],
+    "Si la sonde ne remonte qu’un état « batterie faible », seule l’icône s’affiche": ["If the sensor only reports a “low battery” state, only the icon is shown", "Meldet der Fühler nur „Batterie schwach“, wird nur das Symbol angezeigt", "Si la sonda solo indica «batería baja», solo se muestra el icono", "Se la sonda segnala solo «batteria scarica», viene mostrata solo l'icona", "Als de sensor alleen ‘batterij bijna leeg’ meldt, wordt alleen het pictogram getoond", "Se a sonda só indicar «bateria fraca», apenas o ícone é mostrado", "Jeśli czujnik zgłasza tylko „słaba bateria”, wyświetlana jest tylko ikona"],
+    "Automatique (suit le mode clair / sombre)": ["Automatic (follows light / dark mode)", "Automatisch (folgt hell / dunkel)", "Automático (sigue el modo claro / oscuro)", "Automatico (segue la modalità chiara / scura)", "Automatisch (volgt licht / donker)", "Automático (segue o modo claro / escuro)", "Automatycznie (jasny / ciemny tryb)"],
+    "Sombre": ["Dark", "Dunkel", "Oscuro", "Scuro", "Donker", "Escuro", "Ciemny"],
+    "Clair": ["Light", "Hell", "Claro", "Chiaro", "Licht", "Claro", "Jasny"],
+    "Couleurs de mon thème Home Assistant": ["My Home Assistant theme colours", "Farben meines Home-Assistant-Themes", "Colores de mi tema de Home Assistant", "Colori del mio tema Home Assistant", "Kleuren van mijn Home Assistant-thema", "Cores do meu tema do Home Assistant", "Kolory mojego motywu Home Assistant"],
+    "Toujours": ["Always", "Immer", "Siempre", "Sempre", "Altijd", "Sempre", "Zawsze"],
+    "Seulement si faible": ["Only when low", "Nur wenn schwach", "Solo si está baja", "Solo se scarica", "Alleen als bijna leeg", "Só se fraca", "Tylko gdy słaba"],
+    "Jamais": ["Never", "Nie", "Nunca", "Mai", "Nooit", "Nunca", "Nigdy"],
+    "Pièces": ["Rooms", "Räume", "Habitaciones", "Stanze", "Ruimtes", "Divisões", "Pomieszczenia"],
+    "Pièce {n}": ["Room {n}", "Raum {n}", "Habitación {n}", "Stanza {n}", "Ruimte {n}", "Divisão {n}", "Pomieszczenie {n}"],
+    "+ Ajouter une pièce": ["+ Add a room", "+ Raum hinzufügen", "+ Añadir una habitación", "+ Aggiungi una stanza", "+ Ruimte toevoegen", "+ Adicionar uma divisão", "+ Dodaj pomieszczenie"],
+    "Nouvelle pièce": ["New room", "Neuer Raum", "Nueva habitación", "Nuova stanza", "Nieuwe ruimte", "Nova divisão", "Nowe pomieszczenie"],
+    "HOLM Étage": ["HOLM Floor", "HOLM Etage", "HOLM Planta", "HOLM Piano", "HOLM Verdieping", "HOLM Piso", "HOLM Piętro"],
+    "Températures et humidité d'un étage : bande thermique, tuiles pièces avec tendance et courbes.": ["Temperatures and humidity of a floor: heat strip, room tiles with trends and charts.", "Temperaturen und Feuchtigkeit einer Etage: Wärmeleiste, Raumkacheln mit Trend und Kurven.", "Temperaturas y humedad de una planta: banda térmica, mosaicos de habitaciones con tendencia y curvas.", "Temperature e umidità di un piano: barra termica, riquadri delle stanze con tendenza e curve.", "Temperaturen en vochtigheid van een verdieping: warmtebalk, ruimtetegels met trend en grafieken.", "Temperaturas e humidade de um piso: faixa térmica, mosaicos de divisões com tendência e curvas.", "Temperatura i wilgotność piętra: pasek termiczny, kafelki pomieszczeń z trendem i wykresami."]
+  };
+  let LANG = "fr", NUMLOC = "fr-FR";
+  const langOf = (hass, c) => { const l = String((c && c.language) || (hass && ((hass.locale && hass.locale.language) || hass.language)) || navigator.language || "en").toLowerCase().split(/[-_]/)[0]; return l === "fr" || HOLM_LANGS.includes(l) ? l : "en"; };
+  const setLang = (hass, c) => { LANG = langOf(hass, c); const p = hass && hass.locale && hass.locale.language; NUMLOC = !(c && c.language) && p && p.toLowerCase().startsWith(LANG) ? p : LOCALES[LANG]; return LANG; };
+  const _ = (s, v) => { let o = LANG === "fr" ? s : ((I18N[s] && I18N[s][HOLM_LANGS.indexOf(LANG)]) || s); if (v) for (const k in v) o = o.split("{" + k + "}").join(v[k]); return o; };
+  // champ « Langue » pour les éditeurs visuels (ha-form)
+  const langField = () => ({ name: "language", selector: { select: { mode: "dropdown", options: [{ value: "", label: _("Automatique (profil)") }, ...Object.entries(LANG_NAMES).map(([value, label]) => ({ value, label }))] } } });
+  // traduit les titres de sections et les libellés d'options d'un schéma ha-form (écrits en français)
+  const locSchema = (sc) => (sc || []).map((x) => { const o = { ...x }; if (o.title) o.title = _(o.title); if (o.schema) o.schema = locSchema(o.schema);
+    if (o.selector && o.selector.select && o.name !== "language") o.selector = { ...o.selector, select: { ...o.selector.select, options: (o.selector.select.options || []).map((op) => (typeof op === "string" ? op : { ...op, label: _(op.label) })) } };
+    if (o.name === "language" && o.selector && o.selector.select) o.selector = { ...o.selector, select: { ...o.selector.select, options: o.selector.select.options.map((op) => (op.value ? op : { ...op, label: _("Automatique (profil)") })) } };
+    return o; });
   const STOPS = [[-5, [129, 140, 248]], [5, [96, 165, 250]], [12, [56, 189, 248]], [17, [45, 212, 191]], [20, [74, 222, 128]], [23, [250, 204, 21]], [25.5, [251, 146, 60]], [28, [239, 68, 68]], [35, [220, 38, 38]]];
   const tRGB = (t) => {
     if (t == null || isNaN(t)) return [148, 163, 184];
@@ -23,8 +121,8 @@
     return STOPS[STOPS.length - 1][1];
   };
   const rgb = (a) => a.join(",");
-  const hum = (h) => (h == null ? null : h < 35 ? { c: "251,191,36", t: "Sec" } : h <= 60 ? { c: "45,212,191", t: "Idéal" } : h <= 70 ? { c: "56,189,248", t: "Humide" } : { c: "96,165,250", t: "Très humide" });
-  const fmt = (v, d = 1) => (v == null || isNaN(v) ? "–" : Number(v).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const hum = (h) => (h == null ? null : h < 35 ? { c: "251,191,36", t: _("Sec") } : h <= 60 ? { c: "45,212,191", t: _("Idéal") } : h <= 70 ? { c: "56,189,248", t: _("Humide") } : { c: "96,165,250", t: _("Très humide") });
+  const fmt = (v, d = 1) => (v == null || isNaN(v) ? "–" : Number(v).toLocaleString(NUMLOC, { minimumFractionDigits: d, maximumFractionDigits: d }));
   const num = (s) => (s && !isNaN(parseFloat(s.state)) ? parseFloat(s.state) : null);
   const avg = (a) => { const v = a.filter((x) => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
 
@@ -64,11 +162,11 @@
     }
     static getStubConfig(hass) {
       const t = hass ? Object.keys(hass.states).filter((k) => k.startsWith("sensor.") && hass.states[k].attributes.device_class === "temperature").slice(0, 3) : [];
-      return { type: "custom:holm-floor-card", title: "Rez-de-chaussée", icon: "mdi:home-floor-0", rooms: t.map((e) => ({ name: hass.states[e].attributes.friendly_name || e, temperature: e })) };
+      setLang(hass); return { type: "custom:holm-floor-card", title: _("Rez-de-chaussée"), icon: "mdi:home-floor-0", rooms: t.map((e) => ({ name: hass.states[e].attributes.friendly_name || e, temperature: e })) };
     }
     setConfig(config) {
-      if (!config || !Array.isArray(config.rooms) || !config.rooms.length) throw new Error("Ajoute au moins une pièce.");
-      this._config = { title: "Étage", icon: "mdi:home-floor-0", hours: 24, show_humidity: true, theme: "auto", battery_display: "always", battery_percent: false, battery_warn: 30, battery_low: 15, ...config };
+      if (!config || !Array.isArray(config.rooms) || !config.rooms.length) throw new Error(_("Ajoute au moins une pièce."));
+      this._config = { icon: "mdi:home-floor-0", hours: 24, show_humidity: true, theme: "auto", battery_display: "always", battery_percent: false, battery_warn: 30, battery_low: 15, ...config };
       this._stats = {};
       this._statsTs = 0;
       this._sel = null;
@@ -87,6 +185,7 @@
       this._hass = hass;
       if (!this._config) return;
       this._tone();
+      if (setLang(hass, this._config) !== this._lang) { this._lang = LANG; this._built = false; }
       if (!this._built) this._build();
       this._render();
       this._fetch(false);
@@ -200,14 +299,14 @@
       const card = this.shadowRoot.querySelector("ha-card");
       card.style.setProperty("--f", rgb(tRGB(a)));
       $("ficon").setAttribute("icon", cfg.icon);
-      $("title").textContent = cfg.title;
+      $("title").textContent = cfg.title === undefined ? _("Étage") : _(cfg.title);
       const out = cfg.outdoor_entity ? num(this._hass.states[cfg.outdoor_entity]) : null;
-      const parts = [`${rooms.length} pièce${rooms.length > 1 ? "s" : ""}`];
+      const parts = [_(rooms.length > 1 ? _("{n} pièces") : _("{n} pièce"), { n: rooms.length })];
       if (ah != null && cfg.show_humidity) parts.push(`<span class="hdrop"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(ah, 0)} %</span>`);
-      if (lo != null && hi - lo >= 0.1) parts.push(`écart ${fmt(hi - lo)}°`);
-      if (out != null) parts.push(`<span class="out"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>dehors ${fmt(out)}°</span>`);
+      if (lo != null && hi - lo >= 0.1) parts.push(_("écart {x}°", { x: fmt(hi - lo) }));
+      if (out != null) parts.push(`<span class="out"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>${_("dehors {x}°", { x: fmt(out) })}</span>`);
       $("sub").innerHTML = parts.join(" · ");
-      $("avg").innerHTML = a == null ? "" : `<b>${fmt(a)}</b><sup>°</sup><small>moyenne</small>`;
+      $("avg").innerHTML = a == null ? "" : `<b>${fmt(a)}</b><sup>°</sup><small>${_("moyenne")}</small>`;
 
       // bande thermique
       const smin = Math.floor(Math.min(lo ?? 18, (a ?? 20) - 3, out ?? 99) - 1);
@@ -223,14 +322,14 @@
         const W = (this.$("strip").getBoundingClientRect().width || 320) - 12;
         const lanes = [-1e9, -1e9, -1e9];
         const items = sorted.map((x) => ({ x, px: pos(x.t), label: (x.r.short || x.r.name).slice(0, 12) }));
-        if (out != null) items.push({ out: true, px: pos(out), label: "dehors" });
+        if (out != null) items.push({ out: true, px: pos(out), label: _("dehors") });
         items.sort((p, q) => p.px - q.px);
         $("dots").innerHTML = items.map((it) => {
           const wPct = ((it.label.length * 5.6 + 8) / W) * 100;
           let lane = lanes.findIndex((r) => it.px - wPct / 2 > r + 1);
           const show = lane >= 0;
           if (show) lanes[lane] = it.px + wPct / 2; else lane = 0;
-          if (it.out) return `<span class="dot out" style="left:${it.px}%;--c:200,210,225;--l:${lane}"><i></i>${show ? "<em>dehors</em>" : ""}</span>`;
+          if (it.out) return `<span class="dot out" style="left:${it.px}%;--c:200,210,225;--l:${lane}"><i></i>${show ? `<em>${_("dehors")}</em>` : ""}</span>`;
           const x = it.x;
           return `<span class="dot${this._sel === x.i ? " sel" : ""}" style="left:${it.px}%;--c:${rgb(tRGB(x.t))};--l:${lane}" title="${x.r.name} ${fmt(x.t)}°"><i></i>${show ? `<em>${it.label}</em>` : ""}</span>`;
         }).join("") + (a != null ? `<span class="mean" style="left:${pos(a)}%"></span>` : "");
@@ -271,7 +370,7 @@
         bt.style.display = showBat ? "" : "none";
         if (showBat) {
           bt.style.setProperty("--b", x.bat.c);
-          bt.title = `Batterie${x.bat.pct != null ? ` ${x.bat.pct} %` : x.bat.low ? " faible" : ""}`;
+          bt.title = x.bat.pct != null ? _("Batterie {p} %", { p: x.bat.pct }) : x.bat.low ? _("Batterie faible") : _("Batterie");
           bt.innerHTML = `<ha-icon icon="${x.bat.icon}"></ha-icon>${cfg.battery_percent && x.bat.pct != null ? `${x.bat.pct}<small>%</small>` : ""}`;
         }
         el.querySelector(".tv").textContent = fmt(x.t);
@@ -328,18 +427,18 @@
         const step = this._period === "7j" ? 86400000 : 6 * 3600000;
         for (let t = Math.ceil(t0 / step) * step; t < t1; t += step) {
           const dt = new Date(t);
-          ticks.push(`<text class="xt" x="${X(t)}" y="${H - 4}">${this._period === "7j" ? dt.toLocaleDateString("fr-FR", { weekday: "short" }) : dt.getHours() + "h"}</text>`);
+          ticks.push(`<text class="xt" x="${X(t)}" y="${H - 4}">${this._period === "7j" ? dt.toLocaleDateString(NUMLOC, { weekday: "short" }) : dt.getHours() + "h"}</text>`);
         }
         svg = `<svg viewBox="0 0 ${W} ${H}" class="big"><g class="grid">${grid}</g>${ticks.join("")}
           ${band ? `<path d="${band}" class="band"/>` : ""}${hpath ? `<path d="${hpath}" class="hl"/>` : ""}<path d="${path(tp, "v")}" class="tl"/></svg>`;
-      } else svg = `<div class="nodata">Historique en cours de chargement…</div>`;
+      } else svg = `<div class="nodata">${_("Historique en cours de chargement…")}</div>`;
       d.innerHTML = `
         <div class="dh"><span class="dn"><ha-icon icon="${x.r.icon || "mdi:thermometer"}"></ha-icon>${x.r.name}</span>
-          <span class="seg"><button data-p="24h" class="${this._period === "24h" ? "on" : ""}">24 h</button><button data-p="7j" class="${this._period === "7j" ? "on" : ""}">7 j</button></span>
-          <button class="x" title="Fermer"><ha-icon icon="mdi:close"></ha-icon></button></div>
+          <span class="seg"><button data-p="24h" class="${this._period === "24h" ? "on" : ""}">24 h</button><button data-p="7j" class="${this._period === "7j" ? "on" : ""}">${_("7 j")}</button></span>
+          <button class="x" title="${_("Fermer")}"><ha-icon icon="mdi:close"></ha-icon></button></div>
         ${svg}
-        <div class="dl"><span><i class="lt"></i>Température</span>${hp.length > 1 ? `<span><i class="lh"></i>Humidité</span>` : ""}
-          <span class="mm">min <b style="color:rgb(${rgb(tRGB(mn))})">${fmt(mn)}°</b> · moy <b>${fmt(av)}°</b> · max <b style="color:rgb(${rgb(tRGB(mx))})">${fmt(mx)}°</b></span></div>`;
+        <div class="dl"><span><i class="lt"></i>${_("Température")}</span>${hp.length > 1 ? `<span><i class="lh"></i>${_("Humidité")}</span>` : ""}
+          <span class="mm">${_("min {a} · moy {b} · max {c}", { a: `<b style="color:rgb(${rgb(tRGB(mn))})">${fmt(mn)}°</b>`, b: `<b>${fmt(av)}°</b>`, c: `<b style="color:rgb(${rgb(tRGB(mx))})">${fmt(mx)}°</b>` })}</span></div>`;
       d.style.setProperty("--c", rgb(tRGB(x.t)));
       d.classList.add("open");
       d.querySelector(".x").addEventListener("click", () => { this._sel = null; this._render(); });
@@ -466,7 +565,7 @@
       this._render();
     }
     set hass(hass) {
-      this._hass = hass;
+      this._hass = hass; setLang(hass, this._config);
       this.querySelectorAll("ha-form").forEach((f) => (f.hass = hass));
       if (!this._done) this._render();
     }
@@ -477,8 +576,8 @@
     }
     _form(schema, data, cb, L) {
       const f = document.createElement("ha-form");
-      f.hass = this._hass; f.schema = schema; f.data = data; f.computeLabel = (s) => L[s.name] || s.name;
-      f.computeHelper = (s) => (this._help || {})[s.name] || "";
+      f.hass = this._hass; f.schema = locSchema(schema); f.data = data; f.computeLabel = (s) => (L[s.name] ? _(L[s.name]) : s.name);
+      f.computeHelper = (s) => ((this._help || {})[s.name] ? _(this._help[s.name]) : "");
       f.addEventListener("value-changed", (e) => { e.stopPropagation(); f.data = e.detail.value; cb({ ...e.detail.value }); });
       return f;
     }
@@ -490,29 +589,30 @@
     }
     _render() {
       if (!this._hass || !this._config) return;
-      this._done = true;
+      this._done = true; setLang(this._hass, this._config);
       this._open = this._open || new Set();
       const c = this._config;
       c.rooms = c.rooms || [];
-      const L = { title: "Nom de l'étage", icon: "Icône", outdoor_entity: "Température extérieure (option)", hours: "Heures sur les mini-courbes", show_humidity: "Afficher l'humidité",
-        theme: "Apparence", battery_display: "Badge batterie", battery_percent: "Afficher le pourcentage", battery_warn: "Seuil orange (%)", battery_low: "Seuil rouge (%)",
-        name: "Pièce", short: "Nom court (bande)", temperature: "Capteur de température", humidity: "Capteur d'humidité (option)", battery: "Batterie de la sonde (option)" };
-      this._help = { battery_display: "Pour les pièces qui ont un capteur de batterie", battery_percent: "Si la sonde ne remonte qu\u2019un état « batterie faible », seule l\u2019icône s\u2019affiche" };
+      const L = { language: _("Langue"), title: _("Nom de l'étage"), icon: _("Icône"), outdoor_entity: _("Température extérieure (option)"), hours: _("Heures sur les mini-courbes"), show_humidity: _("Afficher l'humidité"),
+        theme: _("Apparence"), battery_display: _("Badge batterie"), battery_percent: _("Afficher le pourcentage"), battery_warn: _("Seuil orange (%)"), battery_low: _("Seuil rouge (%)"),
+        name: _("Pièce"), short: _("Nom court (bande)"), temperature: _("Capteur de température"), humidity: _("Capteur d'humidité (option)"), battery: _("Batterie de la sonde (option)") };
+      this._help = { battery_display: _("Pour les pièces qui ont un capteur de batterie"), battery_percent: "Si la sonde ne remonte qu\u2019un état « batterie faible », seule l\u2019icône s\u2019affiche" };
       this.innerHTML = `<style>.fl-h{margin:14px 0 6px;font-weight:700;display:flex;align-items:center;gap:8px}ha-expansion-panel{margin:6px 0;border-radius:12px}.fl-r{display:flex;align-items:center;gap:4px}.fl-r .t{flex:1;display:flex;gap:8px;align-items:center;font-weight:600}.fl-add{margin-top:8px}button.fl-add{padding:8px 14px;border-radius:10px;border:1px solid var(--divider-color,#888);background:none;color:var(--primary-color);font:inherit;font-weight:600;cursor:pointer}</style>`;
       this.appendChild(this._form([
         { type: "grid", name: "", schema: [{ name: "title", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
         { name: "outdoor_entity", selector: { entity: { domain: "sensor", device_class: "temperature" } } },
         { type: "grid", name: "", schema: [{ name: "hours", selector: { number: { min: 6, max: 72, step: 6, mode: "box" } } }, { name: "show_humidity", selector: { boolean: {} } }] },
-        { name: "theme", selector: { select: { mode: "dropdown", options: [{ value: "auto", label: "Automatique (suit le mode clair / sombre)" }, { value: "dark", label: "Sombre" }, { value: "light", label: "Clair" }, { value: "theme", label: "Couleurs de mon thème Home Assistant" }] } } },
+        { name: "theme", selector: { select: { mode: "dropdown", options: [{ value: "auto", label: _("Automatique (suit le mode clair / sombre)") }, { value: "dark", label: _("Sombre") }, { value: "light", label: _("Clair") }, { value: "theme", label: _("Couleurs de mon thème Home Assistant") }] } } },
         { type: "grid", name: "", schema: [
-          { name: "battery_display", selector: { select: { mode: "dropdown", options: [{ value: "always", label: "Toujours" }, { value: "low", label: "Seulement si faible" }, { value: "never", label: "Jamais" }] } } },
+          { name: "battery_display", selector: { select: { mode: "dropdown", options: [{ value: "always", label: _("Toujours") }, { value: "low", label: _("Seulement si faible") }, { value: "never", label: _("Jamais") }] } } },
           { name: "battery_percent", selector: { boolean: {} } },
           { name: "battery_warn", selector: { number: { min: 5, max: 95, step: 5, mode: "box", unit_of_measurement: "%" } } },
           { name: "battery_low", selector: { number: { min: 5, max: 95, step: 5, mode: "box", unit_of_measurement: "%" } } },
         ] },
-      ], { hours: 24, show_humidity: true, theme: "auto", battery_display: "always", battery_percent: false, battery_warn: 30, battery_low: 15, ...c }, (v) => { Object.assign(this._config, v); this._emit(); }, L));
+        langField(),
+      ], { language: "", hours: 24, show_humidity: true, theme: "auto", battery_display: "always", battery_percent: false, battery_warn: 30, battery_low: 15, ...c }, (v) => { const relang = (v.language || "") !== (this._config.language || ""); Object.assign(this._config, v); if (!v.language) delete this._config.language; this._emit(); if (relang) setTimeout(() => this._render()); }, L));
       const h = document.createElement("div");
-      h.className = "fl-h"; h.innerHTML = `<ha-icon icon="mdi:floor-plan"></ha-icon>Pièces`;
+      h.className = "fl-h"; h.innerHTML = `<ha-icon icon="mdi:floor-plan"></ha-icon>${_("Pièces")}`;
       this.appendChild(h);
       c.rooms.forEach((r, i) => {
         const p = document.createElement("ha-expansion-panel");
@@ -523,12 +623,12 @@
         hd.slot = "header"; hd.className = "fl-r";
         const t = document.createElement("div");
         t.className = "t";
-        const ref = (room) => (t.innerHTML = `<ha-icon icon="${room.icon || "mdi:thermometer"}"></ha-icon>${room.name || "Pièce " + (i + 1)}`);
+        const ref = (room) => (t.innerHTML = `<ha-icon icon="${room.icon || "mdi:thermometer"}"></ha-icon>${room.name || _("Pièce {n}", { n: i + 1 })}`);
         ref(r);
         const move = (to) => { const o = new Set([...this._open].map((k) => (k === i ? to : k === to ? i : k))); this._open = o; };
         hd.append(t,
-          this._btn("mdi:arrow-up", "Monter", () => { if (i > 0) { c.rooms.splice(i - 1, 0, c.rooms.splice(i, 1)[0]); move(i - 1); this._emit(); this._render(); } }),
-          this._btn("mdi:delete-outline", "Supprimer", () => { c.rooms.splice(i, 1); this._open = new Set([...this._open].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))); this._emit(); this._render(); }));
+          this._btn("mdi:arrow-up", _("Monter"), () => { if (i > 0) { c.rooms.splice(i - 1, 0, c.rooms.splice(i, 1)[0]); move(i - 1); this._emit(); this._render(); } }),
+          this._btn("mdi:delete-outline", _("Supprimer"), () => { c.rooms.splice(i, 1); this._open = new Set([...this._open].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))); this._emit(); this._render(); }));
         p.appendChild(hd);
         p.appendChild(this._form([
           { type: "grid", name: "", schema: [{ name: "name", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
@@ -542,8 +642,8 @@
       const tag = customElements.get("ha-button") ? "ha-button" : "button";
       const add = document.createElement(tag);
       add.className = "fl-add";
-      add.textContent = "+ Ajouter une pièce";
-      add.addEventListener("click", () => { c.rooms.push({ name: "Nouvelle pièce" }); this._open.add(c.rooms.length - 1); this._emit(); this._render(); });
+      add.textContent = _("+ Ajouter une pièce");
+      add.addEventListener("click", () => { c.rooms.push({ name: _("Nouvelle pièce") }); this._open.add(c.rooms.length - 1); this._emit(); this._render(); });
       this.appendChild(add);
     }
   }
@@ -552,8 +652,9 @@
   if (!customElements.get("holm-floor-card-editor")) customElements.define("holm-floor-card-editor", HolmFloorCardEditor);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((c) => c.type === "holm-floor-card")) {
-    window.customCards.push({ type: "holm-floor-card", name: "HOLM Étage", description: "Températures et humidité d'un étage : bande thermique, tuiles pièces avec tendance et courbes.", preview: true });
+    setLang(document.querySelector("home-assistant")?.hass);
+    window.customCards.push({ type: "holm-floor-card", name: _("HOLM Étage"), description: _("Températures et humidité d'un étage : bande thermique, tuiles pièces avec tendance et courbes."), preview: true });
   }
 })();
 
-console.info("%c HOLM-FLOOR %c 1.1.0 ", "background:#4ade80;color:#111;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");
+console.info("%c HOLM-FLOOR %c 1.2.0 ", "background:#4ade80;color:#111;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");

@@ -4,6 +4,8 @@
 ![Version](https://img.shields.io/github/v/release/kaaribou/holm-floor-card)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-03a9f4)
 
+🇫🇷 Français · [🇬🇧 English](README.en.md)
+
 **Toutes les températures d'un étage en un coup d'œil : où il fait trop chaud, trop froid, trop humide, et comment ça évolue.**
 
 HOLM Floor Card regroupe les sondes de température (et d'humidité) d'un étage dans une seule carte colorée : une **bande thermique** place chaque pièce sur une échelle de couleurs, et chaque pièce a sa tuile avec sa **tendance sur 1 h** et sa **mini-courbe sur 24 h**. Un toucher sur une pièce ouvre son **graphique détaillé**.
@@ -23,6 +25,11 @@ HOLM Floor Card regroupe les sondes de température (et d'humidité) d'un étage
 | Vue d'ensemble | Graphique d'une pièce |
 |---|---|
 | ![Vue d'ensemble](docs/images/etage.png) | ![Graphique](docs/images/graphique.png) |
+
+
+### 🆕 Nouveautés de la 1.2.0
+
+- 🌍 **La carte parle 8 langues** : français, anglais, allemand, espagnol, italien, néerlandais, portugais et polonais, éditeur compris. Elle suit la langue de votre profil Home Assistant (anglais si votre langue n'est pas traduite) ; l'option `language` permet d'en imposer une.
 
 ---
 
@@ -67,6 +74,7 @@ rooms:
 
 | Option | Description | Par défaut |
 |---|---|---|
+| `language` | Langue : `fr`, `en`, `de`, `es`, `it`, `nl`, `pt`, `pl` | celle du profil |
 | `title` / `icon` | Titre et icône de l'étage | `Étage` / `mdi:home-floor-0` |
 | `outdoor_entity` | Température extérieure (affichée dans l'en-tête et sur la bande) | — |
 | `hours` | Durée des mini-courbes (h) | `24` |
