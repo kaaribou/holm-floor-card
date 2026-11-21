@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+- **Sécurité** : les noms, noms courts et icônes des pièces (y compris le nom repris du `friendly_name` d'une entité) sont échappés avant d'être insérés dans la carte (bande thermique, en-tête du graphique) ; l'en-tête des pièces dans l'éditeur est construit avec `textContent` / `setAttribute`. Un nom contenant `<`, `"`, `'` ou `&` ne casse plus l'affichage et ne peut plus exécuter de script.
+- README : l'installation commence par la recherche directe dans HACS.
+
 ## 1.2.0
 - **8 langues** : français, anglais, allemand, espagnol, italien, néerlandais, portugais et polonais, pour la carte et son éditeur visuel. Elle suit la langue du profil Home Assistant (anglais si la langue n'est pas traduite) ; nouvelle option `language`, aussi réglable dans l'éditeur.
 - README en anglais (`README.en.md`).

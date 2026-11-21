@@ -27,7 +27,11 @@ HOLM Floor Card regroupe les sondes de température (et d'humidité) d'un étage
 | ![Vue d'ensemble](docs/images/etage.png) | ![Graphique](docs/images/graphique.png) |
 
 
-### 🆕 Nouveautés de la 1.2.0
+### 🆕 Nouveautés de la 1.2.1
+
+- 🔒 **Sécurité** : les noms et icônes des pièces (et le nom repris d'une entité) sont maintenant échappés avant l'affichage. Un nom contenant `<`, `"` ou `&` s'affiche tel quel et ne peut plus casser la carte ni exécuter de code.
+
+### Nouveautés de la 1.2.0
 
 - 🌍 **La carte parle 8 langues** : français, anglais, allemand, espagnol, italien, néerlandais, portugais et polonais, éditeur compris. Elle suit la langue de votre profil Home Assistant (anglais si votre langue n'est pas traduite) ; l'option `language` permet d'en imposer une.
 
@@ -37,10 +41,11 @@ HOLM Floor Card regroupe les sondes de température (et d'humidité) d'un étage
 
 ### Avec HACS (recommandé)
 
-1. HACS → menu ⋮ → **Dépôts personnalisés**.
-2. Ajoutez `https://github.com/kaaribou/holm-floor-card`, catégorie **Tableau de bord** (*Dashboard / Plugin*).
-3. Recherchez la carte → **Télécharger**.
-4. Rechargez la page (Ctrl + F5).
+1. Ouvrez **HACS** et recherchez **HOLM Floor Card**.
+2. Ouvrez la carte → **Télécharger**.
+3. Rechargez la page (Ctrl + F5).
+
+> Si la carte n'apparaît pas encore dans la recherche : HACS → menu ⋮ → **Dépôts personnalisés**, ajoutez `https://github.com/kaaribou/holm-floor-card`, catégorie **Tableau de bord** (*Dashboard / Plugin*), puis reprenez à l'étape 1.
 
 ### Manuellement
 

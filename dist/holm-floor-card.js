@@ -1,4 +1,4 @@
-/* holm-floor-card — https://github.com/kaaribou/holm-floor-card — licence MIT — v1.2.0 */
+/* holm-floor-card — https://github.com/kaaribou/holm-floor-card — licence MIT — v1.2.1 */
 /* HOLM Floor Card — v1
  * Températures & humidité d'un étage, pièce par pièce.
  * - En-tête : moyenne de l'étage, humidité moyenne, écart, température dehors
@@ -11,6 +11,8 @@
 (() => {
   // ---- HOLM i18n : textes écrits en français, traduits à l'affichage (en, de, es, it, nl, pt, pl) ----
   // Langue : option `language` de la carte, sinon celle du profil Home Assistant ; anglais si la langue n'est pas traduite.
+  // Échappement HTML de toute valeur venant de la configuration ou des entités avant insertion dans un gabarit.
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
   const HOLM_LANGS = ["en", "de", "es", "it", "nl", "pt", "pl"];
   const LANG_NAMES = { fr: "Français", en: "English", de: "Deutsch", es: "Español", it: "Italiano", nl: "Nederlands", pt: "Português", pl: "Polski" };
   const LOCALES = { fr: "fr-FR", en: "en-GB", de: "de-DE", es: "es-ES", it: "it-IT", nl: "nl-NL", pt: "pt-PT", pl: "pl-PL" };
@@ -301,10 +303,10 @@
       $("ficon").setAttribute("icon", cfg.icon);
       $("title").textContent = cfg.title === undefined ? _("Étage") : _(cfg.title);
       const out = cfg.outdoor_entity ? num(this._hass.states[cfg.outdoor_entity]) : null;
-      const parts = [_(rooms.length > 1 ? _("{n} pièces") : _("{n} pièce"), { n: rooms.length })];
+      const parts = [esc(_(rooms.length > 1 ? _("{n} pièces") : _("{n} pièce"), { n: rooms.length }))];
       if (ah != null && cfg.show_humidity) parts.push(`<span class="hdrop"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(ah, 0)} %</span>`);
-      if (lo != null && hi - lo >= 0.1) parts.push(_("écart {x}°", { x: fmt(hi - lo) }));
-      if (out != null) parts.push(`<span class="out"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>${_("dehors {x}°", { x: fmt(out) })}</span>`);
+      if (lo != null && hi - lo >= 0.1) parts.push(esc(_("écart {x}°", { x: fmt(hi - lo) })));
+      if (out != null) parts.push(`<span class="out"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>${esc(_("dehors {x}°", { x: fmt(out) }))}</span>`);
       $("sub").innerHTML = parts.join(" · ");
       $("avg").innerHTML = a == null ? "" : `<b>${fmt(a)}</b><sup>°</sup><small>${_("moyenne")}</small>`;
 
@@ -321,7 +323,7 @@
         const sorted = rooms.filter((x) => x.t != null).sort((p, q) => p.t - q.t);
         const W = (this.$("strip").getBoundingClientRect().width || 320) - 12;
         const lanes = [-1e9, -1e9, -1e9];
-        const items = sorted.map((x) => ({ x, px: pos(x.t), label: (x.r.short || x.r.name).slice(0, 12) }));
+        const items = sorted.map((x) => ({ x, px: pos(x.t), label: String(x.r.short || x.r.name || "").slice(0, 12) }));
         if (out != null) items.push({ out: true, px: pos(out), label: _("dehors") });
         items.sort((p, q) => p.px - q.px);
         $("dots").innerHTML = items.map((it) => {
@@ -329,9 +331,9 @@
           let lane = lanes.findIndex((r) => it.px - wPct / 2 > r + 1);
           const show = lane >= 0;
           if (show) lanes[lane] = it.px + wPct / 2; else lane = 0;
-          if (it.out) return `<span class="dot out" style="left:${it.px}%;--c:200,210,225;--l:${lane}"><i></i>${show ? `<em>${_("dehors")}</em>` : ""}</span>`;
+          if (it.out) return `<span class="dot out" style="left:${it.px}%;--c:200,210,225;--l:${lane}"><i></i>${show ? `<em>${esc(_("dehors"))}</em>` : ""}</span>`;
           const x = it.x;
-          return `<span class="dot${this._sel === x.i ? " sel" : ""}" style="left:${it.px}%;--c:${rgb(tRGB(x.t))};--l:${lane}" title="${x.r.name} ${fmt(x.t)}°"><i></i>${show ? `<em>${it.label}</em>` : ""}</span>`;
+          return `<span class="dot${this._sel === x.i ? " sel" : ""}" style="left:${it.px}%;--c:${rgb(tRGB(x.t))};--l:${lane}" title="${esc(x.r.name)} ${fmt(x.t)}°"><i></i>${show ? `<em>${esc(it.label)}</em>` : ""}</span>`;
         }).join("") + (a != null ? `<span class="mean" style="left:${pos(a)}%"></span>` : "");
         $("scale").innerHTML = `<span>${smin}°</span><span>${Math.round((smin + smax) / 2)}°</span><span>${smax}°</span>`;
       }
@@ -380,7 +382,7 @@
           tr.className = "tr " + (x.trend > 0 ? "up" : "down");
         } else { tr.innerHTML = x.trend != null ? `<ha-icon icon="mdi:arrow-right"></ha-icon>stable` : ""; tr.className = "tr"; }
         const hh = hum(x.hu);
-        el.querySelector(".rh").innerHTML = cfg.show_humidity && hh ? `<span style="--h:${hh.c}"><ha-icon icon="mdi:water"></ha-icon>${fmt(x.hu, 0)} %<small>${hh.t}</small></span>` : "";
+        el.querySelector(".rh").innerHTML = cfg.show_humidity && hh ? `<span style="--h:${hh.c}"><ha-icon icon="mdi:water"></ha-icon>${fmt(x.hu, 0)} %<small>${esc(hh.t)}</small></span>` : "";
         const sk = x.pts.length + ":" + (x.pts.length ? x.pts[x.pts.length - 1].t : 0) + ":" + x.t;
         if (el._sk !== sk) {
           el._sk = sk;
@@ -433,9 +435,9 @@
           ${band ? `<path d="${band}" class="band"/>` : ""}${hpath ? `<path d="${hpath}" class="hl"/>` : ""}<path d="${path(tp, "v")}" class="tl"/></svg>`;
       } else svg = `<div class="nodata">${_("Historique en cours de chargement…")}</div>`;
       d.innerHTML = `
-        <div class="dh"><span class="dn"><ha-icon icon="${x.r.icon || "mdi:thermometer"}"></ha-icon>${x.r.name}</span>
+        <div class="dh"><span class="dn"><ha-icon icon="${esc(x.r.icon || "mdi:thermometer")}"></ha-icon>${esc(x.r.name)}</span>
           <span class="seg"><button data-p="24h" class="${this._period === "24h" ? "on" : ""}">24 h</button><button data-p="7j" class="${this._period === "7j" ? "on" : ""}">${_("7 j")}</button></span>
-          <button class="x" title="${_("Fermer")}"><ha-icon icon="mdi:close"></ha-icon></button></div>
+          <button class="x" title="${esc(_("Fermer"))}"><ha-icon icon="mdi:close"></ha-icon></button></div>
         ${svg}
         <div class="dl"><span><i class="lt"></i>${_("Température")}</span>${hp.length > 1 ? `<span><i class="lh"></i>${_("Humidité")}</span>` : ""}
           <span class="mm">${_("min {a} · moy {b} · max {c}", { a: `<b style="color:rgb(${rgb(tRGB(mn))})">${fmt(mn)}°</b>`, b: `<b>${fmt(av)}°</b>`, c: `<b style="color:rgb(${rgb(tRGB(mx))})">${fmt(mx)}°</b>` })}</span></div>`;
@@ -623,7 +625,7 @@
         hd.slot = "header"; hd.className = "fl-r";
         const t = document.createElement("div");
         t.className = "t";
-        const ref = (room) => (t.innerHTML = `<ha-icon icon="${room.icon || "mdi:thermometer"}"></ha-icon>${room.name || _("Pièce {n}", { n: i + 1 })}`);
+        const ref = (room) => { const ic = document.createElement("ha-icon"); ic.setAttribute("icon", room.icon || "mdi:thermometer"); t.replaceChildren(ic, document.createTextNode(room.name || _("Pièce {n}", { n: i + 1 }))); };
         ref(r);
         const move = (to) => { const o = new Set([...this._open].map((k) => (k === i ? to : k === to ? i : k))); this._open = o; };
         hd.append(t,
@@ -657,4 +659,4 @@
   }
 })();
 
-console.info("%c HOLM-FLOOR %c 1.2.0 ", "background:#4ade80;color:#111;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");
+console.info("%c HOLM-FLOOR %c 1.2.1 ", "background:#4ade80;color:#111;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");

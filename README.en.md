@@ -29,7 +29,11 @@ HOLM Floor Card gathers a floor's temperature (and humidity) sensors in one colo
 
 *Screenshots in French — the card follows the language of your Home Assistant profile.*
 
-### 🆕 What's new in 1.2.0
+### 🆕 What's new in 1.2.1
+
+- 🔒 **Security**: room names and icons (and a name taken from an entity) are now escaped before being displayed. A name containing `<`, `"` or `&` is shown as is and can no longer break the card or run code.
+
+### What's new in 1.2.0
 
 - 🌍 **The card speaks 8 languages**: English, French, German, Spanish, Italian, Dutch, Portuguese and Polish, editor included. It follows the language of your Home Assistant profile (English if your language isn't translated yet); the `language` option lets you force one. Numbers and dates follow the language too.
 
@@ -39,10 +43,11 @@ HOLM Floor Card gathers a floor's temperature (and humidity) sensors in one colo
 
 ### With HACS (recommended)
 
-1. HACS → ⋮ menu → **Custom repositories**.
-2. Add `https://github.com/kaaribou/holm-floor-card`, category **Dashboard** (*Plugin*).
-3. Search for the card → **Download**.
-4. Reload the page (Ctrl + F5).
+1. Open **HACS** and search for **HOLM Floor Card**.
+2. Open the card → **Download**.
+3. Reload the page (Ctrl + F5).
+
+> If the card does not show up in the search yet: HACS → ⋮ menu → **Custom repositories**, add `https://github.com/kaaribou/holm-floor-card`, category **Dashboard** (*Plugin*), then start again at step 1.
 
 ### Manually
 
